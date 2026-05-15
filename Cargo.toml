@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/proxmox-api",
+    "tools/pve-agent",
+    "tools/pve-tui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["阿彤"]
+license = "MIT OR Apache-2.0"
+rust-version = "1.75"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "multipart"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive", "wrap_help", "env"] }
+ratatui = "0.29"
+crossterm = "0.28"
+dirs = "6"
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+async-trait = "0.1"
+url = "2"
+rustls = "0.23"
+itertools = "0.14"
+toml = "0.8"
