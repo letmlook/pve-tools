@@ -9,4 +9,5 @@ pub mod error;
 
 pub use client::PveClient;
 pub use client::ClientConfig;
+pub use client::config::ConfigFile;
 pub use error::{PveError, PveResult};

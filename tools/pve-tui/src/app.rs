@@ -68,6 +68,13 @@ pub struct ConnectionConfig {
 
 impl Default for ConnectionConfig {
     fn default() -> Self {
+        // First try to load from config file
+        if let Ok(config_file) = proxmox_api::client::ConfigFile::load() {
+            if let Some(profile) = config_file.resolve_profile(None) {
+                return Self::from_profile(profile);
+            }
+        }
+        // Fall back to env vars
         Self {
             host: std::env::var("PVE_HOST").unwrap_or_else(|_| "192.168.1.100".to_string()),
             port: std::env::var("PVE_PORT").unwrap_or_else(|_| "8006".to_string()),
@@ -83,6 +90,103 @@ impl Default for ConnectionConfig {
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
         }
+    }
+}
+
+impl ConnectionConfig {
+    pub fn from_profile(profile: &ClientConfig) -> Self {
+        Self {
+            host: profile.host.clone(),
+            port: profile.port.to_string(),
+            user: profile.user.clone(),
+            auth_method: if profile.token.is_some() {
+                AuthMethod::Token
+            } else {
+                AuthMethod::Password
+            },
+            token: profile.token.clone().unwrap_or_default(),
+            password: profile.password.clone().unwrap_or_default(),
+            verify_ssl: profile.verify_ssl,
+        }
+    }
+
+    pub fn save_to_file(&self) -> anyhow::Result<()> {
+        let client_config = ClientConfig {
+            host: self.host.clone(),
+            port: self.port.parse().unwrap_or(8006),
+            user: self.user.clone(),
+            token: if self.auth_method == AuthMethod::Token && !self.token.is_empty() {
+                Some(self.token.clone())
+            } else {
+                None
+            },
+            password: if self.auth_method == AuthMethod::Password && !self.password.is_empty() {
+                Some(self.password.clone())
+            } else {
+                None
+            },
+            verify_ssl: self.verify_ssl,
+            timeout_secs: 60,
+        };
+
+        let mut config_file = proxmox_api::client::ConfigFile::load().unwrap_or_default();
+        config_file.default = Some(client_config);
+        config_file.save()?;
+        Ok(())
+    }
+
+    pub fn test_connection(&self) -> bool {
+        let config = self.to_client_config();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            match proxmox_api::PveClient::new(&config).await {
+                Ok(_) => true,
+                Err(_) => false,
+            }
+        })
+    }
+
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        // Validate host
+        if self.host.is_empty() {
+            errors.push("Host is required".to_string());
+        } else if !self.host.contains('.') && self.host != "localhost" {
+            // Might be just a hostname without TLD, but not necessarily an error
+        }
+
+        // Validate port
+        if let Ok(port) = self.host.parse::<u16>() {
+            if port == 0 {
+                errors.push("Port cannot be 0".to_string());
+            }
+        }
+
+        // Validate user format
+        if self.user.is_empty() {
+            errors.push("User is required".to_string());
+        } else if !self.user.contains('@') {
+            errors.push("User should be in format user@realm (e.g., root@pam)".to_string());
+        }
+
+        // Validate auth
+        match self.auth_method {
+            AuthMethod::Token => {
+                if self.token.is_empty() {
+                    errors.push("API Token is required when using Token auth".to_string());
+                } else if !self.token.contains('=') {
+                    errors.push("Token should be in format userid=tokenid=secret".to_string());
+                }
+            }
+            AuthMethod::Password => {
+                if self.password.is_empty() {
+                    errors.push("Password is required when using Password auth".to_string());
+                }
+            }
+        }
+
+        errors
     }
 }
 

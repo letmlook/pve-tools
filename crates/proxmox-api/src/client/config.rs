@@ -102,6 +102,21 @@ impl ConfigFile {
             .or(self.default.as_ref())
             .or(self.profiles.values().next())
     }
+
+    /// Save config to user config file (~/.config/pve/config.toml)
+    pub fn save(&self) -> anyhow::Result<()> {
+        let path = Self::user_config_path()
+            .ok_or_else(|| anyhow::anyhow!("could not determine config directory"))?;
+
+        // Create parent directories if needed
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let contents = toml::to_string_pretty(self)?;
+        std::fs::write(&path, contents)?;
+        Ok(())
+    }
 }
 
 impl ClientConfig {

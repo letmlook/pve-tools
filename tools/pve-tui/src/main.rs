@@ -65,6 +65,21 @@ fn main() -> Result<()> {
             // Handle pending connect after key press
             if app.connecting {
                 app.connecting = false;
+
+                // Validate first
+                let errors = app.setup_config.validate();
+                if !errors.is_empty() {
+                    app.error_msg = Some(errors.join("; "));
+                    app.setup_field = SetupField::Host;
+                    continue;
+                }
+
+                // Save config to file
+                if let Err(e) = app.setup_config.save_to_file() {
+                    // Log but continue - saving is optional
+                    eprintln!("Warning: failed to save config: {}", e);
+                }
+
                 let config = app.to_client_config();
                 let host = config.host.clone();
                 let client_clone = Arc::clone(&client);
