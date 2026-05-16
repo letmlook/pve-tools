@@ -168,8 +168,16 @@ fn handle_setup_key(app: &mut AppState, key: KeyCode) {
         KeyCode::End => {
             app.setup_cursor = app.get_value(app.setup_field).len();
         }
-        KeyCode::Left | KeyCode::Right => {
-            app.setup_cursor = 0;
+        KeyCode::Left => {
+            if app.setup_cursor > 0 {
+                app.setup_cursor -= 1;
+            }
+        }
+        KeyCode::Right => {
+            let max_len = app.get_value(app.setup_field).len();
+            if app.setup_cursor < max_len {
+                app.setup_cursor += 1;
+            }
         }
         _ => {}
     }
