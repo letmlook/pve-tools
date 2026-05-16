@@ -43,8 +43,8 @@ async fn resolve_vm_node(client: &PveClient, vmid: u32) -> Option<String> {
     None
 }
 
-fn resolve_vm_type(client: &PveClient, vmid: u32) -> String {
-    // Quick type lookup - try to determine if qemu or lxc
+fn resolve_vm_type(_client: &PveClient, _vmid: u32) -> String {
+    // TODO: implement type detection from cluster resources
     "qemu".to_string()
 }
 
@@ -75,7 +75,7 @@ fn print_table(v: &Value) {
     }
 }
 
-fn param_vec<'a>(pairs: Vec<(&'a str, String)>) -> Vec<(String, String)> {
+fn _unused_param_vec<'a>(pairs: Vec<(&'a str, String)>) -> Vec<(String, String)> {
     pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
 }
 
@@ -305,7 +305,7 @@ async fn run_vm_cmd(client: &PveClient, sub: &VmSub, args: &CliArgs) -> anyhow::
             Ok(client.post_form(&format!("/nodes/{}/qemu/{}/status/resume", node, vmid), None).await?)
         }
 
-        VmSub::Create { node, name, memory, cores, disk, type_, ostype, net, iso } => {
+        VmSub::Create { node, name, memory, cores, disk, type_: _, ostype, net, iso } => {
             let mut params = vec![
                 ("name".to_string(), name.clone()),
                 ("memory".to_string(), memory.to_string()),
@@ -448,7 +448,7 @@ async fn run_vm_cmd(client: &PveClient, sub: &VmSub, args: &CliArgs) -> anyhow::
             }
         }
 
-        VmSub::Tag { vmid, sub } => match sub {
+        VmSub::Tag { vmid: _, sub } => match sub {
             TagSub::List { vmid } => {
                 let node = resolve_vm_node(client, *vmid).await.unwrap_or_else(|| "localhost".to_string());
                 Ok(client.get(&format!("/nodes/{}/qemu/{}/config", node, vmid)).await?)
