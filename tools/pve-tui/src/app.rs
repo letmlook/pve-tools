@@ -157,7 +157,7 @@ impl ConnectionConfig {
         }
 
         // Validate port
-        if let Ok(port) = self.host.parse::<u16>() {
+        if let Ok(port) = self.port.parse::<u16>() {
             if port == 0 {
                 errors.push("Port cannot be 0".to_string());
             }

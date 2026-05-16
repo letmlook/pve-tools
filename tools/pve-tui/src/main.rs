@@ -178,6 +178,7 @@ fn handle_setup_key(app: &mut AppState, key: KeyCode) {
         }
         KeyCode::Char('p') | KeyCode::Char('P') if app.setup_field == SetupField::AuthMethod => {
             app.setup_config.auth_method = AuthMethod::Password;
+            app.setup_config.password.clear();
             app.setup_cursor = 0;
         }
         KeyCode::Char(c) => {
