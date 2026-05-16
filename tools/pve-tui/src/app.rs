@@ -38,6 +38,12 @@ impl View {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AppMode {
+    Setup,
+    Running,
+}
+
 #[derive(Clone)]
 pub struct VmEntry {
     pub vmid: u32,
@@ -49,7 +55,144 @@ pub struct VmEntry {
     pub mem: u64,
 }
 
+#[derive(Clone)]
+pub struct ConnectionConfig {
+    pub host: String,
+    pub port: String,
+    pub user: String,
+    pub auth_method: AuthMethod,
+    pub token: String,
+    pub password: String,
+    pub verify_ssl: bool,
+}
+
+impl Default for ConnectionConfig {
+    fn default() -> Self {
+        Self {
+            host: std::env::var("PVE_HOST").unwrap_or_else(|_| "192.168.1.100".to_string()),
+            port: std::env::var("PVE_PORT").unwrap_or_else(|_| "8006".to_string()),
+            user: std::env::var("PVE_USER").unwrap_or_else(|_| "root@pam".to_string()),
+            auth_method: if std::env::var("PVE_TOKEN").ok().map(|s| !s.is_empty()).unwrap_or(false) {
+                AuthMethod::Token
+            } else {
+                AuthMethod::Password
+            },
+            token: std::env::var("PVE_TOKEN").unwrap_or_default(),
+            password: std::env::var("PVE_PASSWORD").unwrap_or_default(),
+            verify_ssl: std::env::var("PVE_VERIFY_SSL").ok()
+                .map(|v| v == "1" || v == "true")
+                .unwrap_or(false),
+        }
+    }
+}
+
+impl ConnectionConfig {
+    pub fn to_client_config(&self) -> ClientConfig {
+        ClientConfig {
+            host: self.host.clone(),
+            port: self.port.parse().unwrap_or(8006),
+            user: self.user.clone(),
+            token: if self.auth_method == AuthMethod::Token && !self.token.is_empty() {
+                Some(self.token.clone())
+            } else {
+                None
+            },
+            password: if self.auth_method == AuthMethod::Password && !self.password.is_empty() {
+                Some(self.password.clone())
+            } else {
+                None
+            },
+            verify_ssl: self.verify_ssl,
+            timeout_secs: 60,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AuthMethod {
+    Token,
+    Password,
+}
+
+enum SetupSetter {
+    Host,
+    Port,
+    User,
+    Token,
+    Password,
+}
+
+impl SetupSetter {
+    fn set(&self, app: &mut AppState, value: String) {
+        match self {
+            SetupSetter::Host => app.setup_config.host = value,
+            SetupSetter::Port => app.setup_config.port = value,
+            SetupSetter::User => app.setup_config.user = value,
+            SetupSetter::Token => app.setup_config.token = value,
+            SetupSetter::Password => app.setup_config.password = value,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SetupField {
+    Host,
+    Port,
+    User,
+    AuthMethod,
+    Token,
+    Password,
+    VerifySsl,
+    Connect,
+}
+
+impl SetupField {
+    pub fn all() -> [SetupField; 8] {
+        [SetupField::Host, SetupField::Port, SetupField::User, SetupField::AuthMethod, SetupField::Token, SetupField::Password, SetupField::VerifySsl, SetupField::Connect]
+    }
+
+    pub fn next(&self) -> Self {
+        match self {
+            SetupField::Host => SetupField::Port,
+            SetupField::Port => SetupField::User,
+            SetupField::User => SetupField::AuthMethod,
+            SetupField::AuthMethod => SetupField::Token,
+            SetupField::Token => SetupField::VerifySsl,
+            SetupField::Password => SetupField::VerifySsl,
+            SetupField::VerifySsl => SetupField::Connect,
+            SetupField::Connect => SetupField::Host,
+        }
+    }
+
+    pub fn prev(&self) -> Self {
+        match self {
+            SetupField::Host => SetupField::Connect,
+            SetupField::Port => SetupField::Host,
+            SetupField::User => SetupField::Port,
+            SetupField::AuthMethod => SetupField::User,
+            SetupField::Token => SetupField::AuthMethod,
+            SetupField::Password => SetupField::AuthMethod,
+            SetupField::VerifySsl => SetupField::Token,
+            SetupField::Connect => SetupField::VerifySsl,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            SetupField::Host => "Host",
+            SetupField::Port => "Port",
+            SetupField::User => "User",
+            SetupField::AuthMethod => "Auth",
+            SetupField::Token => "API Token",
+            SetupField::Password => "Password",
+            SetupField::VerifySsl => "Skip SSL",
+            SetupField::Connect => "[ Connect ]",
+        }
+    }
+}
+
 pub struct AppState {
+    pub mode: AppMode,
     pub view: View,
     pub loading: bool,
     pub version: Option<Value>,
@@ -62,11 +205,17 @@ pub struct AppState {
     pub logs: Option<Value>,
     pub pve_host: String,
     pub error_msg: Option<String>,
+    // Setup mode
+    pub setup_config: ConnectionConfig,
+    pub setup_field: SetupField,
+    pub setup_cursor: usize,
+    pub connecting: bool,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
+            mode: AppMode::Setup,
             view: View::Dashboard,
             loading: false,
             version: None,
@@ -77,15 +226,13 @@ impl AppState {
             vm_list: Vec::new(),
             selected_vm: None,
             logs: None,
-            pve_host: std::env::var("PVE_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            pve_host: String::new(),
             error_msg: None,
+            setup_config: ConnectionConfig::default(),
+            setup_field: SetupField::Host,
+            setup_cursor: 0,
+            connecting: false,
         }
-    }
-
-    pub fn make_config(&self) -> ClientConfig {
-        let mut c = ClientConfig::from_env();
-        c.host = self.pve_host.clone();
-        c
     }
 
     pub fn cycle_view(&mut self) {
@@ -154,13 +301,102 @@ impl AppState {
         }
     }
 
-    pub fn vm_status_color(&self, status: &str) -> &'static str {
-        match status {
-            "running" => "green",
-            "stopped" => "red",
-            "paused" => "yellow",
-            "suspended" => "yellow",
-            _ => "white",
+    pub fn get_value(&self, field: SetupField) -> &str {
+        match field {
+            SetupField::Host => &self.setup_config.host,
+            SetupField::Port => &self.setup_config.port,
+            SetupField::User => &self.setup_config.user,
+            SetupField::AuthMethod => match self.setup_config.auth_method {
+                AuthMethod::Token => "Token",
+                AuthMethod::Password => "Password",
+            },
+            SetupField::Token => &self.setup_config.token,
+            SetupField::Password => &self.setup_config.password,
+            SetupField::VerifySsl => if self.setup_config.verify_ssl { "true" } else { "false" },
+            SetupField::Connect => "",
         }
+    }
+
+    pub fn set_value(&mut self, field: SetupField, value: String) {
+        match field {
+            SetupField::Host => self.setup_config.host = value,
+            SetupField::Port => self.setup_config.port = value,
+            SetupField::User => self.setup_config.user = value,
+            SetupField::AuthMethod => {},
+            SetupField::Token => self.setup_config.token = value,
+            SetupField::Password => self.setup_config.password = value,
+            SetupField::VerifySsl => self.setup_config.verify_ssl = value == "true",
+            SetupField::Connect => {}
+        }
+    }
+
+    pub fn setup_backspace(&mut self) {
+        let field = self.setup_field;
+        if matches!(field, SetupField::Connect | SetupField::VerifySsl | SetupField::AuthMethod) {
+            return;
+        }
+        let (val, setter) = match field {
+            SetupField::Host => (&self.setup_config.host, SetupSetter::Host),
+            SetupField::Port => (&self.setup_config.port, SetupSetter::Port),
+            SetupField::User => (&self.setup_config.user, SetupSetter::User),
+            SetupField::Token => (&self.setup_config.token, SetupSetter::Token),
+            SetupField::Password => (&self.setup_config.password, SetupSetter::Password),
+            _ => return,
+        };
+        if self.setup_cursor > 0 && self.setup_cursor <= val.len() {
+            let mut new_val = val.clone();
+            new_val.remove(self.setup_cursor - 1);
+            self.setup_cursor = self.setup_cursor.saturating_sub(1);
+            setter.set(self, new_val);
+        } else if self.setup_cursor == 0 && !val.is_empty() {
+            let mut new_val = val.clone();
+            new_val.pop();
+            setter.set(self, new_val);
+        }
+    }
+
+    pub fn setup_type(&mut self, c: char) {
+        let field = self.setup_field;
+        if matches!(field, SetupField::Connect | SetupField::VerifySsl | SetupField::AuthMethod) {
+            return;
+        }
+        let max_len = if field == SetupField::Port { 5 } else { 100 };
+        match field {
+            SetupField::Host => {
+                if self.setup_config.host.len() >= max_len { return; }
+                let pos = self.setup_cursor.min(self.setup_config.host.len());
+                self.setup_config.host.insert(pos, c);
+                self.setup_cursor += 1;
+            }
+            SetupField::Port => {
+                if self.setup_config.port.len() >= max_len { return; }
+                let pos = self.setup_cursor.min(self.setup_config.port.len());
+                self.setup_config.port.insert(pos, c);
+                self.setup_cursor += 1;
+            }
+            SetupField::User => {
+                if self.setup_config.user.len() >= max_len { return; }
+                let pos = self.setup_cursor.min(self.setup_config.user.len());
+                self.setup_config.user.insert(pos, c);
+                self.setup_cursor += 1;
+            }
+            SetupField::Token => {
+                if self.setup_config.token.len() >= max_len { return; }
+                let pos = self.setup_cursor.min(self.setup_config.token.len());
+                self.setup_config.token.insert(pos, c);
+                self.setup_cursor += 1;
+            }
+            SetupField::Password => {
+                if self.setup_config.password.len() >= max_len { return; }
+                let pos = self.setup_cursor.min(self.setup_config.password.len());
+                self.setup_config.password.insert(pos, c);
+                self.setup_cursor += 1;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn to_client_config(&self) -> ClientConfig {
+        self.setup_config.to_client_config()
     }
 }

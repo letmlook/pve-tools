@@ -10,7 +10,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Row, Table, Wrap, List},
 };
 
-use super::app::{AppState, View};
+use super::app::{AppState, View, SetupField, AppMode};
 
 pub fn render(app: &AppState, f: &mut Frame) {
     let area = f.area();
@@ -24,9 +24,137 @@ pub fn render(app: &AppState, f: &mut Frame) {
         Constraint::Length(status_bar_height),
     ]).split(area);
 
-    render_header(app, f, chunks[0]);
-    render_content(app, f, chunks[1]);
-    render_status_bar(app, f, chunks[2]);
+    match app.mode {
+        AppMode::Setup => render_setup(app, f, chunks[1]),
+        AppMode::Running => {
+            render_header(app, f, chunks[0]);
+            render_content(app, f, chunks[1]);
+            render_status_bar(app, f, chunks[2]);
+        }
+    }
+}
+
+fn render_setup(app: &AppState, f: &mut Frame, area: Rect) {
+    // Centered setup form
+    let block = Block::default()
+        .style(Style::new().bg(Color::Rgb(33, 37, 43)))
+        .borders(Borders::ALL)
+        .border_style(Style::new().fg(Color::Rgb(60, 70, 85)));
+    f.render_widget(block, area);
+
+    let inner = Rect::new(area.x + 1, area.y + 1, area.width.saturating_sub(2), area.height.saturating_sub(2));
+
+    // Title
+    let title = Paragraph::new(
+        Line::from(" PVE Manager - Connection Setup ").style(Style::new().bold().fg(Color::Cyan))
+    );
+    f.render_widget(title, Rect::new(inner.x, inner.y, inner.width, 1));
+
+    // Separator line
+    let sep = Paragraph::new(Line::from("─".repeat(inner.width as usize)).style(Style::new().fg(Color::Rgb(60, 70, 85))));
+    f.render_widget(sep, Rect::new(inner.x, inner.y + 1, inner.width, 1));
+
+    // Form fields
+    let fields = SetupField::all();
+    let line_height = 2u16;
+    let form_top = inner.y + 3;
+
+    for (i, field) in fields.iter().enumerate() {
+        let y = form_top + (i as u16) * line_height;
+        if y + line_height > inner.y + inner.height.saturating_sub(1) {
+            break;
+        }
+
+        let is_active = *field == app.setup_field;
+        let label = format!("{}: ", field.label());
+        let value = app.get_value(*field);
+        let cursor = app.setup_cursor;
+
+        // Build display text with cursor
+        let display = if is_active && *field != SetupField::VerifySsl && *field != SetupField::Connect {
+            if cursor <= value.len() {
+                let before = &value[..cursor];
+                let after = &value[cursor..];
+                format!("{}{}{}", before, "█", after)
+            } else {
+                format!("{}█", value)
+            }
+        } else {
+            value.to_string()
+        };
+
+        let bg_color = if is_active { Color::Rgb(45, 48, 55) } else { Color::Rgb(33, 37, 43) };
+        let fg_color = if is_active { Color::Yellow } else { Color::White };
+
+        let line = Paragraph::new(Line::from(format!("{}{}", label, display)))
+            .style(Style::new().fg(fg_color).bg(bg_color));
+        f.render_widget(line, Rect::new(inner.x, y, inner.width, line_height));
+
+        // For AuthMethod, show toggle hint
+        if *field == SetupField::AuthMethod {
+            let hint_line = Paragraph::new(Line::from(format!(
+                "{}: {} (T/P)",
+                field.label(),
+                app.get_value(*field),
+            )).style(Style::new().fg(if is_active { Color::Yellow } else { Color::Gray })));
+            f.render_widget(hint_line, Rect::new(inner.x, y, inner.width, line_height));
+        } else if *field == SetupField::Password {
+            // Show masked password
+            let masked = "*".repeat(app.setup_config.password.len());
+            let display = if is_active {
+                if app.setup_cursor <= masked.len() {
+                    let before = &masked[..app.setup_cursor];
+                    let after = &masked[app.setup_cursor..];
+                    format!("{}{}{}", before, "█", after)
+                } else {
+                    format!("{}█", masked)
+                }
+            } else {
+                masked
+            };
+            let bg_color = if is_active { Color::Rgb(45, 48, 55) } else { Color::Rgb(33, 37, 43) };
+            let fg_color = if is_active { Color::Yellow } else { Color::White };
+            let line = Paragraph::new(Line::from(format!("{}: {}", field.label(), display)))
+                .style(Style::new().fg(fg_color).bg(bg_color));
+            f.render_widget(line, Rect::new(inner.x, y, inner.width, line_height));
+        } else if *field == SetupField::VerifySsl {
+            let hint = if app.setup_config.verify_ssl { " (Y/n)" } else { " (y/N)" };
+            let hint_line = Paragraph::new(Line::from(format!(
+                "{}: {} {}",
+                field.label(),
+                if app.setup_config.verify_ssl { "true" } else { "false" },
+                hint
+            )).style(Style::new().fg(if is_active { Color::Yellow } else { Color::Gray })));
+            f.render_widget(hint_line, Rect::new(inner.x, y, inner.width, line_height));
+        } else if *field != SetupField::Connect {
+            let line = Paragraph::new(Line::from(format!("{}{}", label, display)))
+                .style(Style::new().fg(fg_color).bg(bg_color));
+            f.render_widget(line, Rect::new(inner.x, y, inner.width, line_height));
+        }
+    }
+
+    // Instructions
+    let instr_y = inner.y + inner.height.saturating_sub(3);
+    let instr = Paragraph::new(Line::from(vec![
+        "  ".into(),
+        "Tab/↓: Next field  ".into(),
+        "Shift+Tab/↑: Prev  ".into(),
+        "Enter: Select/Connect  ".into(),
+        "Esc: Back  ".into(),
+    ]).style(Style::new().fg(Color::Gray)));
+    f.render_widget(instr, Rect::new(inner.x, instr_y, inner.width, 1));
+
+    // Connecting indicator
+    if app.connecting {
+        let conn_msg = Paragraph::new(Line::from("  Connecting... ").style(Style::new().fg(Color::Yellow).bold()));
+        f.render_widget(conn_msg, Rect::new(inner.x, instr_y + 1, inner.width, 1));
+    }
+
+    // Error message
+    if let Some(ref err) = app.error_msg {
+        let err_msg = Paragraph::new(Line::from(format!("  Error: {} ", err)).style(Style::new().fg(Color::Red)));
+        f.render_widget(err_msg, Rect::new(inner.x, inner.y + inner.height.saturating_sub(1), inner.width, 1));
+    }
 }
 
 fn render_header(app: &AppState, f: &mut Frame, area: Rect) {
@@ -35,7 +163,7 @@ fn render_header(app: &AppState, f: &mut Frame, area: Rect) {
     let block = Block::default().style(Style::new().bg(Color::Rgb(33, 37, 43)));
     f.render_widget(block, area);
 
-    let title = format!(" PVE Manager v0.1.0  |  Host: {} ", app.pve_host);
+    let title = format!(" PVE Manager  |  {}  ", app.pve_host);
     let title_len = title.len() as u16;
     f.render_widget(
         Paragraph::new(Line::from(title.as_str()).style(Style::new().bold().fg(Color::White))),
@@ -117,6 +245,7 @@ fn render_dashboard(app: &AppState, f: &mut Frame, area: Rect) {
                     let name = node.get("node").or_else(|| node.get("id")).and_then(|s| s.as_str()).unwrap_or("-");
                     let status = node.get("status").and_then(|s| s.as_str()).unwrap_or("-");
                     let s_icon = if status == "online" { "●" } else { "○" };
+                    let _color = if status == "online" { Color::Green } else { Color::Red };
                     lines.push(format!(" {} {} ", s_icon, name));
                 }
                 return lines.join("\n");
@@ -229,16 +358,13 @@ fn render_help(f: &mut Frame, area: Rect) {
 
       q / Esc     Quit
       1-5 / Tab   Switch tab
-      ← / →       Previous / Next tab
       ↑ / j       Move up
       ↓ / k       Move down
       Enter       Select / confirm
       r           Refresh
       s           Start VM
       x           Stop VM
-      d           Delete VM (with confirmation)
-      c           Clone VM
-      m           Migrate VM
+      c           Disconnect (return to setup)
 
     Colors:
       ● green     Running
@@ -263,7 +389,7 @@ fn render_status_bar(app: &AppState, f: &mut Frame, area: Rect) {
         format!("  Error: {}  ", e)
     } else {
         format!(
-            "  Tab: Left/Right  |  R: Refresh  |  S: Start  |  x: Stop  |  q: Quit  |  VMs: {}  ",
+            "  Tab: Left/Right  |  R: Refresh  |  S: Start  |  x: Stop  |  q: Quit  |  c: Disconnect  |  VMs: {}  ",
             app.vm_list.len()
         )
     };
