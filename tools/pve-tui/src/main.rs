@@ -181,6 +181,19 @@ fn handle_setup_key(app: &mut AppState, key: KeyCode) {
             app.setup_config.password.clear();
             app.setup_cursor = 0;
         }
+        KeyCode::Enter if app.setup_field == SetupField::AuthMethod => {
+            // Toggle auth method on Enter
+            match app.setup_config.auth_method {
+                AuthMethod::Token => {
+                    app.setup_config.auth_method = AuthMethod::Password;
+                    app.setup_config.password.clear();
+                }
+                AuthMethod::Password => {
+                    app.setup_config.auth_method = AuthMethod::Token;
+                }
+            }
+            app.setup_cursor = 0;
+        }
         KeyCode::Char(c) => {
             if !matches!(app.setup_field, SetupField::Connect | SetupField::VerifySsl | SetupField::AuthMethod) {
                 app.setup_type(c);
