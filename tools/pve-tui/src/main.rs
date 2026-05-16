@@ -5,6 +5,7 @@ mod ui;
 
 use std::io;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 
 use anyhow::Result;
@@ -15,7 +16,14 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
+static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+
 fn main() -> Result<()> {
+    // Set up ctrl-c handler
+    ctrlc::set_handler(|| {
+        SHOULD_EXIT.store(true, Ordering::SeqCst);
+    }).expect("Error setting Ctrl-C handler");
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -28,11 +36,24 @@ fn main() -> Result<()> {
     let mut app = AppState::new();
 
     loop {
+        if SHOULD_EXIT.load(Ordering::SeqCst) {
+            break;
+        }
+
         terminal.draw(|f| ui::render(&app, f))?;
+
+        if !event::poll(std::time::Duration::from_millis(100))? {
+            continue;
+        }
 
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
                 continue;
+            }
+
+            // Check exit flag before processing
+            if SHOULD_EXIT.load(Ordering::SeqCst) {
+                break;
             }
 
             let disconnect = match app.mode {
@@ -45,6 +66,11 @@ fn main() -> Result<()> {
                     d
                 }
             };
+
+            // Check exit flag after handling key
+            if SHOULD_EXIT.load(Ordering::SeqCst) {
+                break;
+            }
 
             if disconnect {
                 app.mode = AppMode::Setup;
@@ -123,8 +149,8 @@ fn main() -> Result<()> {
 
 fn handle_setup_key(app: &mut AppState, key: KeyCode) {
     match key {
-        KeyCode::Char('q') => {
-            std::process::exit(0);
+        KeyCode::Char('q') | KeyCode::Esc => {
+            SHOULD_EXIT.store(true, Ordering::SeqCst);
         }
         KeyCode::Tab | KeyCode::Down => {
             app.setup_field = app.setup_field.next();
@@ -184,13 +210,16 @@ fn handle_setup_key(app: &mut AppState, key: KeyCode) {
 }
 
 fn handle_running_key(app: &mut AppState, key: KeyCode) -> bool {
-    // Returns true if should disconnect
+    // Returns true if should return to setup (disconnect), false otherwise
     match key {
-        KeyCode::Char('q') | KeyCode::Char('Q') => {
-            std::process::exit(0);
-        }
-        KeyCode::Char('c') | KeyCode::Char('C') | KeyCode::Esc => {
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            // Disconnect - return to setup mode
             return true;
+        }
+        KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+            // Quit - set exit flag
+            SHOULD_EXIT.store(true, Ordering::SeqCst);
+            return false;
         }
         KeyCode::Char('\t') | KeyCode::Right => {
             app.cycle_view();
