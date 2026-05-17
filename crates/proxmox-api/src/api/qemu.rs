@@ -16,10 +16,11 @@ pub async fn list(client: &PveClient, node: &str, filter: Option<&str>, status: 
     }
 
     if !params.is_empty() {
-        path = format!("{}?{}", path, params.iter()
-            .map(|(k, v)| format!("{}={}", k, v))
+        let query = params.iter()
+            .map(|(k, v)| format!("{}={}", k, urlencoding(v)))
             .collect::<Vec<_>>()
-            .join("&"));
+            .join("&");
+        path = format!("{}?{}", path, query);
     }
 
     client.get(&path).await
