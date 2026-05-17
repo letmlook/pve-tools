@@ -29,7 +29,8 @@ impl AuthContext {
 pub struct TicketResponse {
     pub username: String,
     pub ticket: String,
-    pub CSRFPreventionToken: String,
+    #[serde(rename = "CSRFPreventionToken")]
+    pub csrf_prevention_token: String,
     pub cap: serde_json::Value,
     pub expire: i64,
 }
@@ -65,66 +66,154 @@ pub async fn login(
     user: &str,
     auth: AuthMethod,
 ) -> anyhow::Result<AuthContext> {
-    let (token, password) = match auth {
-        AuthMethod::Token(t) => (Some(t), None),
-        AuthMethod::Password(p) => (None, Some(p)),
-    };
-
-    // If we have a token, try token auth
-    if let Some(token_str) = token {
-        if token_str.contains('=') {
-            // Full token: userid=tokenid=secret
-            let parts: Vec<&str> = token_str.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                let auth_value = format!("PVEAPIToken={}", token_str);
-                // Test the token by getting version
-                let resp = http
-                    .get(format!("{}/api2/json/version", base_url))
-                    .header("Authorization", auth_value)
-                    .send()
-                    .await?;
-
-                if resp.status() == 401 || resp.status() == 403 {
-                    anyhow::bail!("invalid API token");
-                }
-
-                return Ok(AuthContext {
-                    ticket: token_str.clone(),
-                    csrf_token: String::new(),
-                    username: user.to_string(),
-                    capabilities: serde_json::Value::Null,
-                    expire: i64::MAX,
-                });
+    // 1. 先尝试 token auth (如果提供了 token)
+    if let AuthMethod::Token(ref token_str) = auth {
+        if !token_str.is_empty() {
+            if let Some(ctx) = try_token_auth(http, base_url, user, token_str).await {
+                return Ok(ctx);
             }
+            // token 无效，继续尝试密码
         }
-        anyhow::bail!("invalid token format, expected userid=tokenid=secret");
     }
 
-    // Password login
-    let password = password.ok_or_else(|| anyhow::anyhow!("password required"))?;
+    // 2. 密码登录 (或 token 无效后的 fallback)
+    if let AuthMethod::Password(ref password) = auth {
+        if !password.is_empty() {
+            return password_login(http, base_url, user, password).await;
+        }
+    }
+
+    anyhow::bail!("no valid credentials provided (need token or password)")
+}
+
+/// Try token authentication, return None if token is invalid or not provided
+async fn try_token_auth(
+    http: &reqwest::Client,
+    base_url: &str,
+    user: &str,
+    token_str: &str,
+) -> Option<AuthContext> {
+    // 构建 token value
+    let auth_value = if token_str.contains('=') {
+        format!("PVEAPIToken={}", token_str)
+    } else {
+        // 没有 =，把整个字符串当作 tokenid，前缀加 user
+        format!("PVEAPIToken={}={}", user, token_str)
+    };
 
     let resp = http
-        .post(format!("{}/api2/json/access/ticket", base_url))
-        .form(&[
-            ("username", user),
-            ("password", &password),
-        ])
+        .get(format!("{}/version", base_url))
+        .header("Authorization", auth_value)
         .send()
-        .await?;
+        .await
+        .ok()?;
 
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
+    // 401/403 表示 token 无效
+    if resp.status() == 401 || resp.status() == 403 {
+        return None;
+    }
+
+    if resp.status().is_success() {
+        return Some(AuthContext {
+            ticket: token_str.to_string(),
+            csrf_token: String::new(),
+            username: user.to_string(),
+            capabilities: serde_json::Value::Null,
+            expire: i64::MAX,
+        });
+    }
+
+    None
+}
+
+use std::collections::HashMap;
+
+/// Extract error message from PVE error response JSON
+fn extract_error_message(body: &str) -> Option<String> {
+    // Try to parse as generic JSON and look for error fields
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+        // Try "error" field first
+        if let Some(msg) = json.get("error").and_then(|v| v.as_str()) {
+            return Some(msg.to_string());
+        }
+        // Then "message" field
+        if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+            return Some(msg.to_string());
+        }
+        // Try "response" field (some PVE endpoints use this)
+        if let Some(msg) = json.get("response").and_then(|v| v.as_str()) {
+            return Some(msg.to_string());
+        }
+    }
+    None
+}
+
+/// Password login via PAM
+async fn password_login(
+    http: &reqwest::Client,
+    base_url: &str,
+    user: &str,
+    password: &str,
+) -> anyhow::Result<AuthContext> {
+    // 确保用户名有 realm 后缀，默认使用 pam
+    let user_with_realm = if user.contains('@') {
+        user.to_string()
+    } else {
+        format!("{}@pam", user)
+    };
+
+    let url = format!("{}/access/ticket", base_url);
+    println!("[DEBUG] login url = {}", url);
+    println!("[DEBUG] login user = {}", user_with_realm);
+
+    // 手动构造 form data (参考 Go 项目的做法)
+    let mut form_data = HashMap::new();
+    form_data.insert("username", user_with_realm.as_str());
+    form_data.insert("password", password);
+
+    let resp = http
+        .post(url.as_str())
+        .form(&form_data)
+        .send()
+        .await
+        .map_err(|e| {
+            println!("[DEBUG] reqwest error: {}", e);
+            anyhow::anyhow!("request failed: {}", e)
+        })?;
+
+    println!("[DEBUG] response status = {}", resp.status());
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    println!("[DEBUG] response body (first 500 chars) = {}", &body[..body.len().min(500)]);
+
+    if !status.is_success() {
         anyhow::bail!("login failed ({}): {}", status, body);
     }
 
-    let ticket: TicketResponse = resp.json().await?;
+    // First, try to parse as TicketResponse
+    let ticket: Result<TicketResponse, _> = serde_json::from_str(&body);
 
-    Ok(AuthContext {
-        ticket: ticket.ticket,
-        csrf_token: ticket.CSRFPreventionToken,
-        username: ticket.username,
-        capabilities: ticket.cap,
-        expire: ticket.expire,
-    })
+    match ticket {
+        Ok(t) => {
+            Ok(AuthContext {
+                ticket: t.ticket,
+                csrf_token: t.csrf_prevention_token,
+                username: t.username,
+                capabilities: t.cap,
+                expire: t.expire,
+            })
+        }
+        Err(e) => {
+            // JSON parse failed - check if server returned an error JSON
+            println!("[DEBUG] JSON parse failed, checking for error response: {}", e);
+
+            if let Some(error_msg) = extract_error_message(&body) {
+                anyhow::bail!("authentication failed: {}", error_msg);
+            }
+
+            // No recognizable error message - show raw body for debugging
+            let preview = if body.len() > 200 { &body[..200] } else { &body };
+            anyhow::bail!("login failed: JSON parse error: {}; response: {}...", e, preview)
+        }
+    }
 }
