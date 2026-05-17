@@ -12,3 +12,5 @@ pub mod firewall;
 pub mod ha;
 pub mod backup;
 pub mod version;
+pub mod replication;
+pub mod ceph;
