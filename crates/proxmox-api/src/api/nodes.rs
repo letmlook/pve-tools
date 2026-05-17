@@ -40,11 +40,11 @@ pub async fn create_network(client: &PveClient, node: &str, params: &[(String, S
 }
 
 pub async fn update_network(client: &PveClient, node: &str, iface: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
-    client.put(&format!("/nodes/{}/network/{}", node, iface), Some(params)).await
+    client.put(&format!("/nodes/{}/network/{}", node, urlenc(iface)), Some(params)).await
 }
 
 pub async fn delete_network(client: &PveClient, node: &str, iface: &str) -> PveResult<serde_json::Value> {
-    client.delete(&format!("/nodes/{}/network/{}", node, iface)).await
+    client.delete(&format!("/nodes/{}/network/{}", node, urlenc(iface))).await
 }
 
 pub async fn get_tasks(client: &PveClient, node: &str, limit: Option<u32>) -> PveResult<serde_json::Value> {
@@ -61,4 +61,15 @@ pub async fn get_rrd(client: &PveClient, node: &str, timeframe: &str) -> PveResu
 
 pub async fn get_rrddata(client: &PveClient, node: &str, timeframe: &str) -> PveResult<serde_json::Value> {
     client.get(&format!("/nodes/{}/rrddata?timeframe={}", node, timeframe)).await
+}
+
+fn urlenc(s: &str) -> String {
+    let mut r = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => r.push(b as char),
+            _ => r.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    r
 }
