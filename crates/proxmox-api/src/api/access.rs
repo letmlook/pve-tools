@@ -60,7 +60,80 @@ pub async fn delete_acl(client: &PveClient, path: &str, userid: Option<&str>, gr
     client.put("/access/acl", Some(&p)).await
 }
 
-fn urlenc(s: &str) -> String {
+// Domain management
+pub async fn list_domains(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/access/domains").await
+}
+
+pub async fn create_domain(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/access/domains", Some(params)).await
+}
+
+pub async fn get_domain(client: &PveClient, realm: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/access/domains/{}", urlenc(realm))).await
+}
+
+pub async fn update_domain(client: &PveClient, realm: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/access/domains/{}", urlenc(realm)), Some(params)).await
+}
+
+pub async fn delete_domain(client: &PveClient, realm: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/access/domains/{}", urlenc(realm))).await
+}
+
+// Group management (enhance existing)
+pub async fn create_group(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/access/groups", Some(params)).await
+}
+
+pub async fn get_group(client: &PveClient, groupid: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/access/groups/{}", urlenc(groupid))).await
+}
+
+pub async fn update_group(client: &PveClient, groupid: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/access/groups/{}", urlenc(groupid)), Some(params)).await
+}
+
+pub async fn delete_group(client: &PveClient, groupid: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/access/groups/{}", urlenc(groupid))).await
+}
+
+// Role management
+pub async fn create_role(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/access/roles", Some(params)).await
+}
+
+pub async fn get_role(client: &PveClient, roleid: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/access/roles/{}", urlenc(roleid))).await
+}
+
+pub async fn update_role(client: &PveClient, roleid: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/access/roles/{}", urlenc(roleid)), Some(params)).await
+}
+
+pub async fn delete_role(client: &PveClient, roleid: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/access/roles/{}", urlenc(roleid))).await
+}
+
+// TFA management
+pub async fn get_tfa(client: &PveClient, userid: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/access/tfa/{}", urlenc(userid))).await
+}
+
+pub async fn update_tfa(client: &PveClient, userid: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/access/tfa/{}", urlenc(userid)), Some(params)).await
+}
+
+pub async fn delete_tfa(client: &PveClient, userid: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/access/tfa/{}", urlenc(userid))).await
+}
+
+// OpenID
+pub async fn get_openid(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/access/openid").await
+}
+
+pub(crate) fn urlenc(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
         match b {
