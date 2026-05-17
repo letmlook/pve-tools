@@ -32,7 +32,7 @@ pub struct ClusterResource {
     pub id: String,
     pub node: Option<String>,
     pub status: Option<String>,
-    pub uptine: Option<u64>,
+    pub uptime: Option<u64>,
     pub maxcpu: Option<f64>,
     pub cpu: Option<f64>,
     pub maxmem: Option<u64>,
