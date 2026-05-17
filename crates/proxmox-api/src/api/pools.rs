@@ -23,6 +23,11 @@ pub async fn delete(client: &PveClient, poolid: &str) -> PveResult<serde_json::V
     client.delete(&format!("/pools/{}", urlenc(poolid))).await
 }
 
+/// Get pool members
+pub async fn get_members(client: &PveClient, poolid: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/pools/{}/members", urlenc(poolid))).await
+}
+
 fn urlenc(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
