@@ -73,6 +73,76 @@ pub async fn delete_snapshot(client: &PveClient, node: &str, vmid: u32, name: &s
     client.delete(&format!("/nodes/{}/lxc/{}/snapshot/{}", node, vmid, enc)).await
 }
 
+/// Get pending changes
+pub async fn get_pending(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/lxc/{}/pending", node, vmid)).await
+}
+
+/// Resize container
+pub async fn resize(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/resize", node, vmid), Some(params)).await
+}
+
+/// Move volume
+pub async fn move_volume(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/move_volume", node, vmid), Some(params)).await
+}
+
+/// Get network interfaces
+pub async fn get_interfaces(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/lxc/{}/interfaces", node, vmid)).await
+}
+
+/// Create network interface
+pub async fn create_interface(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/interfaces", node, vmid), Some(params)).await
+}
+
+/// Update network interface
+pub async fn update_interface(client: &PveClient, node: &str, vmid: u32, iface: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/nodes/{}/lxc/{}/interfaces/{}", node, vmid, urlenc(iface)), Some(params)).await
+}
+
+/// Delete network interface
+pub async fn delete_interface(client: &PveClient, node: &str, vmid: u32, iface: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/nodes/{}/lxc/{}/interfaces/{}", node, vmid, urlenc(iface))).await
+}
+
+/// Migrate container
+pub async fn migrate(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/migrate", node, vmid), Some(params)).await
+}
+
+/// Create template
+pub async fn to_template(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/template", node, vmid), None).await
+}
+
+/// VNC proxy
+pub async fn vnc_proxy(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/vncproxy", node, vmid), None).await
+}
+
+/// VNC WebSocket
+pub async fn vnc_websocket(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/lxc/{}/vncwebsocket", node, vmid)).await
+}
+
+/// Terminal proxy
+pub async fn term_proxy(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/lxc/{}/termproxy", node, vmid), None).await
+}
+
+/// Get RRD data
+pub async fn get_rrd(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/lxc/{}/rrd", node, vmid)).await
+}
+
+/// Get RRD data with timeframe
+pub async fn get_rrddata(client: &PveClient, node: &str, vmid: u32, timeframe: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/lxc/{}/rrddata?timeframe={}", node, vmid, timeframe)).await
+}
+
 fn urlenc(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {

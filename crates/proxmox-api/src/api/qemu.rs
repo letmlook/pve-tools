@@ -171,6 +171,76 @@ pub async fn get_rrd(client: &PveClient, node: &str, vmid: u32, timeframe: &str)
     client.get(&format!("/nodes/{}/qemu/{}/rrd?timeframe={}", node, vmid, timeframe)).await
 }
 
+/// Pause VM
+pub async fn pause(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/status/pause", node, vmid), None).await
+}
+
+/// Unpause VM
+pub async fn unpause(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/status/unpause", node, vmid), None).await
+}
+
+/// Send key to VM
+pub async fn sendkey(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/sendkey", node, vmid), Some(params)).await
+}
+
+/// Send monitor command
+pub async fn monitor(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/monitor", node, vmid), Some(params)).await
+}
+
+/// Generate CloudInit config
+pub async fn cloudinit(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/cloudinit", node, vmid), Some(params)).await
+}
+
+/// SPICE proxy
+pub async fn spiceproxy(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/spiceproxy", node, vmid), Some(params)).await
+}
+
+/// VNC WebSocket
+pub async fn vnc_websocket(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/qemu/{}/vncwebsocket", node, vmid)).await
+}
+
+/// Terminal proxy
+pub async fn term_proxy(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/termproxy", node, vmid), None).await
+}
+
+/// M-Tunnel (move tunnel)
+pub async fn mtunnel(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/qemu/{}/mtunnel", node, vmid)).await
+}
+
+/// Get VM RRD data with timeframe
+pub async fn get_rrddata(client: &PveClient, node: &str, vmid: u32, timeframe: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/qemu/{}/rrddata?timeframe={}", node, vmid, timeframe)).await
+}
+
+/// Get VM features
+pub async fn get_feature(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/qemu/{}/feature", node, vmid)).await
+}
+
+/// Get VM capabilities
+pub async fn get_capabilities(client: &PveClient, node: &str, vmid: u32) -> PveResult<serde_json::Value> {
+    client.get(&format!("/nodes/{}/qemu/{}/capabilities", node, vmid)).await
+}
+
+/// Configure VM from snapshot
+pub async fn snapshot_config(client: &PveClient, node: &str, vmid: u32, snapname: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/nodes/{}/qemu/{}/snapshot/{}/config", node, vmid, urlencoding(snapname)), Some(params)).await
+}
+
+/// Update firewall rule (move position)
+pub async fn update_firewall_rule(client: &PveClient, node: &str, vmid: u32, pos: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/nodes/{}/qemu/{}/firewall/rules/{}", node, vmid, pos), Some(params)).await
+}
+
 fn urlencoding(s: &str) -> String {
     let mut result = String::new();
     for byte in s.bytes() {
