@@ -36,7 +36,7 @@ pub async fn get_content(client: &PveClient, storage: &str, content_type: Option
 }
 
 pub async fn delete_content(client: &PveClient, storage: &str, content_type: &str, volume: &str) -> PveResult<serde_json::Value> {
-    client.delete(&format!("/storage/{}/content/{}/{}", storage, content_type, urlenc(volume))).await
+    client.delete(&format!("/storage/{}/content/{}/{}", storage, urlenc(content_type), urlenc(volume))).await
 }
 
 pub async fn node_storage_list(client: &PveClient, node: &str) -> PveResult<serde_json::Value> {
