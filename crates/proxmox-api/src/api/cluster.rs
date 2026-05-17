@@ -79,3 +79,102 @@ pub async fn get_tasks(client: &PveClient, limit: Option<u32>) -> PveResult<serd
     };
     client.get(&path).await
 }
+
+// Cluster options
+pub async fn get_cluster_options(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/options").await
+}
+
+pub async fn update_cluster_options(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put("/cluster/options", Some(params)).await
+}
+
+// Cluster config
+pub async fn get_cluster_config(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/config").await
+}
+
+pub async fn reconfigure_cluster(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/config", Some(params)).await
+}
+
+// Metrics
+pub async fn get_metrics(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/metrics").await
+}
+
+pub async fn configure_metrics(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/metrics", Some(params)).await
+}
+
+// Notifications
+pub async fn get_notifications(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/notifications").await
+}
+
+pub async fn send_notification(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/notifications", Some(params)).await
+}
+
+// Replication (cluster level)
+pub async fn get_replication(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/replication").await
+}
+
+pub async fn create_replication(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/replication", Some(params)).await
+}
+
+pub async fn get_replication_by_id(client: &PveClient, id: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/cluster/replication/{}", urlenc(id))).await
+}
+
+pub async fn update_replication(client: &PveClient, id: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/cluster/replication/{}", urlenc(id)), Some(params)).await
+}
+
+pub async fn delete_replication(client: &PveClient, id: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/cluster/replication/{}", urlenc(id))).await
+}
+
+// Jobs
+pub async fn get_cluster_jobs(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/jobs").await
+}
+
+pub async fn create_cluster_job(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/jobs", Some(params)).await
+}
+
+// ACME cluster level
+pub async fn get_cluster_acme(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/acme").await
+}
+
+pub async fn update_cluster_acme(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put("/cluster/acme", Some(params)).await
+}
+
+// Mapping
+pub async fn get_cluster_mapping(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/mapping").await
+}
+
+pub async fn create_cluster_mapping(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/mapping", Some(params)).await
+}
+
+pub async fn delete_cluster_mapping(client: &PveClient, mapping_type: &str, id: &str) -> PveResult<serde_json::Value> {
+    client.delete(&format!("/cluster/mapping/{}/{}", urlenc(mapping_type), urlenc(id))).await
+}
+
+fn urlenc(s: &str) -> String {
+    let mut r = String::new();
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => r.push(b as char),
+            _ => r.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    r
+}

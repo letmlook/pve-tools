@@ -35,6 +35,25 @@ pub async fn delete_group(client: &PveClient, name: &str) -> PveResult<serde_jso
     client.delete(&format!("/cluster/ha/groups/{}", urlenc(name))).await
 }
 
+// HA Manager status
+pub async fn get_manager_status(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/ha/manager/status").await
+}
+
+pub async fn ha_manager_action(client: &PveClient, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form("/cluster/ha/manager", Some(params)).await
+}
+
+// HA Groups - update
+pub async fn update_ha_group(client: &PveClient, name: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/cluster/ha/groups/{}", urlenc(name)), Some(params)).await
+}
+
+// HA config
+pub async fn get_ha_config(client: &PveClient) -> PveResult<serde_json::Value> {
+    client.get("/cluster/ha/config").await
+}
+
 fn urlenc(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
