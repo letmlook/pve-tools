@@ -181,10 +181,18 @@ async fn password_login(
             anyhow::anyhow!("request failed: {}", e)
         })?;
 
+    println!("[DEBUG] response headers: {:?}", resp.headers());
     println!("[DEBUG] response status = {}", resp.status());
     let status = resp.status();
     let body = resp.text().await.unwrap_or_default();
-    println!("[DEBUG] response body (first 500 chars) = {}", &body[..body.len().min(500)]);
+
+    let body_preview = if body.len() > 300 { format!("{}...", &body[..300]) } else { body.clone() };
+
+    if body.contains("<html") {
+        println!("[DEBUG] response body (HTML): {}", body_preview);
+    } else {
+        println!("[DEBUG] response body (JSON/text): {}", body_preview);
+    }
 
     if !status.is_success() {
         anyhow::bail!("login failed ({}): {}", status, body);
