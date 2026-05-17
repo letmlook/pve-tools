@@ -26,8 +26,8 @@ pub async fn delete_schedule(client: &PveClient, id: &str) -> PveResult<serde_js
     client.delete(&path).await
 }
 
-pub async fn trigger_backup(client: &PveClient, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
-    let path = format!("/nodes/self/qemu/{}/backup", vmid);
+pub async fn trigger_backup(client: &PveClient, node: &str, vmid: u32, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    let path = format!("/nodes/{}/qemu/{}/backup", node, vmid);
     client.post_form(&path, Some(params)).await
 }
 
