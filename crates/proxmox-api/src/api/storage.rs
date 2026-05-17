@@ -29,14 +29,14 @@ pub async fn get_status(client: &PveClient, storage: &str) -> PveResult<serde_js
 
 pub async fn get_content(client: &PveClient, storage: &str, content_type: Option<&str>) -> PveResult<serde_json::Value> {
     let path = match content_type {
-        Some(ct) => format!("/storage/{}/content?type={}", storage, ct),
+        Some(ct) => format!("/storage/{}/content?type={}", storage, urlenc(ct)),
         None => format!("/storage/{}/content", storage),
     };
     client.get(&path).await
 }
 
 pub async fn delete_content(client: &PveClient, storage: &str, content_type: &str, volume: &str) -> PveResult<serde_json::Value> {
-    client.delete(&format!("/storage/{}/content/{}", content_type, urlenc(volume))).await
+    client.delete(&format!("/storage/{}/content/{}/{}", storage, content_type, urlenc(volume))).await
 }
 
 pub async fn node_storage_list(client: &PveClient, node: &str) -> PveResult<serde_json::Value> {
