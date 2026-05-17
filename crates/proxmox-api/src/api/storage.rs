@@ -43,6 +43,26 @@ pub async fn node_storage_list(client: &PveClient, node: &str) -> PveResult<serd
     client.get(&format!("/nodes/{}/storage", node)).await
 }
 
+/// Upload content to storage
+pub async fn upload(client: &PveClient, storage: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/storage/{}/upload", storage), Some(params)).await
+}
+
+/// Get volume info
+pub async fn get_volume(client: &PveClient, storage: &str, content_type: &str, volume: &str) -> PveResult<serde_json::Value> {
+    client.get(&format!("/storage/{}/content/{}/{}", storage, urlenc(content_type), urlenc(volume))).await
+}
+
+/// Update volume properties
+pub async fn update_volume(client: &PveClient, storage: &str, content_type: &str, volume: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.put(&format!("/storage/{}/content/{}/{}", storage, urlenc(content_type), urlenc(volume)), Some(params)).await
+}
+
+/// Prune backup snapshots
+pub async fn prune_backups(client: &PveClient, storage: &str, params: &[(String, String)]) -> PveResult<serde_json::Value> {
+    client.post_form(&format!("/storage/{}/prune-backups", storage), Some(params)).await
+}
+
 fn urlenc(s: &str) -> String {
     let mut r = String::new();
     for b in s.bytes() {
